@@ -6,8 +6,9 @@ streams:
   cam2: rtsp://USER:PASSWORD@HUB_IP:554/ch1_1.264
   cam3: rtsp://USER:PASSWORD@HUB_IP:554/ch2_1.264
   cam4: rtsp://USER:PASSWORD@HUB_IP:554/ch3_1.264
-  # --- full-res main streams (HEVC 2560x1440): click-to-expand. In Docker, go2rtc's
-  #     bundled ffmpeg transcodes HEVC->H264 on demand if the browser can't decode HEVC. ---
+  # --- full-res main streams (HEVC 2560x1440): click-to-expand. For browsers without HEVC
+  #     support, transcode with go2rtc's bundled ffmpeg:
+  #       cam1_hd: ffmpeg:rtsp://USER:PASSWORD@HUB_IP:554/ch0_0.264#video=h264 ---
   cam1_hd: rtsp://USER:PASSWORD@HUB_IP:554/ch0_0.264
   cam2_hd: rtsp://USER:PASSWORD@HUB_IP:554/ch1_0.264
   cam3_hd: rtsp://USER:PASSWORD@HUB_IP:554/ch2_0.264
