@@ -16,16 +16,18 @@ streams:
 # Defaults (1984 API/UI, 8554 RTSP, 8555 WebRTC). Listed for clarity.
 api:
   listen: ":1984"
-  # SECURITY: the go2rtc API/UI has no login by default. Anyone who can reach port 1984
+  # SECURITY: the go2rtc API/UI has no login by default. Anyone who can reach it
   # can watch every camera and add new streams (including `exec:` sources, which run
   # commands on the host). Keep it LAN-only, or set credentials below. With credentials
-  # set, open http://<machine-ip>:1984/ once and log in; if the NightStrix tiles stay
-  # blank, that login is what they're waiting on.
+  # set, the browser asks for them once when NightStrix loads.
   # username: "admin"
   # password: "change-me"
 rtsp:
   listen: ":8554"
 webrtc:
   listen: ":8555"
+  # Docker (bridge network) hides the host IP from WebRTC; advertise it here.
+  candidates:
+    - HOST_LAN_IP:8555     # IP of the machine running Docker, e.g. 192.168.1.50
 log:
   level: info

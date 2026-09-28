@@ -62,8 +62,8 @@
 
 <script src="cams.js"></script>
 <script>
-  // go2rtc runs on the same host that served this page, port 1984.
-  const GO = location.protocol + '//' + location.hostname + ':1984';
+  // go2rtc is proxied by nginx under /go2rtc/ on this same origin (see nginx.conf).
+  const GO = '/go2rtc';
   // Camera list lives in cams.js (copy cams.example.js to create it).
   const CAMS = window.CAMS || [];
   const grid = document.getElementById('grid');

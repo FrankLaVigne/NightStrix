@@ -9,10 +9,11 @@ serves the grid page.
 > trademark of its owner and is used here only to describe compatible hardware.
 
 ## ⚠️ Security — read this first
-- **LAN only. Do not port-forward 8099, 1984, 8554 or 8555 to the internet.** go2rtc's
-  API/UI (port 1984) has **no login by default**: anyone who can reach it can watch
-  every camera and add new streams, including `exec:` sources that run commands on the
-  host. For remote access use a VPN (WireGuard, Tailscale), not port forwarding.
+- **LAN only. Do not port-forward 8099, 8554 or 8555 to the internet.** go2rtc's
+  API/UI (proxied at `http://<machine-ip>:8099/go2rtc/`) has **no login by default**:
+  anyone who can reach it can watch every camera and add new streams, including `exec:`
+  sources that run commands on the host. For remote access use a VPN (WireGuard,
+  Tailscale), not port forwarding.
 - To require a login, uncomment `username`/`password` under `api:` in `go2rtc.yaml`.
 - **Set a password on your hub.** Many Night Owl hubs ship with user `admin` and a blank
   RTSP password, so anyone on your network can view the cameras directly.
@@ -21,13 +22,14 @@ serves the grid page.
 
 ## What's inside
 - `docker-compose.yml` — two services: `go2rtc` (streams) + `viewer` (nginx grid page)
+- `nginx.conf` — serves the page and proxies go2rtc under `/go2rtc/` (one port: 8099)
 - `go2rtc.example.yaml` — template for the camera streams (sub + HD)
 - `web/index.html` — the NightStrix grid dashboard
 - `web/cams.example.js` — template for the camera list shown in the grid
 
 ## Set up
 ```bash
-cp go2rtc.example.yaml go2rtc.yaml       # fill in HUB_IP, USER, PASSWORD
+cp go2rtc.example.yaml go2rtc.yaml       # fill in HUB_IP, USER, PASSWORD, HOST_LAN_IP
 cp web/cams.example.js web/cams.js       # names/ids must match go2rtc.yaml streams
 docker compose up -d
 ```
@@ -54,7 +56,12 @@ RTSP port 554. Channel N (starting at 0):
 Full URL form: `rtsp://USER:PASSWORD@HUB_IP:554/ch0_0.264`
 
 ## Notes / gotchas
-- **go2rtc's own UI** is at `http://<machine-ip>:1984/` — handy for checking status or
+- **Works on Linux, Windows and macOS.** Only ports 8099 (page + go2rtc), 8554 (RTSP)
+  and 8555 (WebRTC) are published. go2rtc's usual 1984 stays inside Docker — on Windows
+  it falls in a port range Hyper-V reserves, which is why it's proxied instead.
+- **WebRTC vs MSE.** Set `webrtc.candidates` in `go2rtc.yaml` to the Docker machine's
+  LAN IP for low-latency WebRTC. Without it, the player falls back to MSE over 8099.
+- **go2rtc's own UI** is at `http://<machine-ip>:8099/go2rtc/` — handy for checking status or
   grabbing WebRTC/RTSP/HLS links. The hub also becomes available as clean RTSP at
   `rtsp://<machine-ip>:8554/cam1` for other apps (Frigate, VLC, Home Assistant).
 - **Battery/solar cameras sleep.** A feed may be black until the camera wakes (motion,
