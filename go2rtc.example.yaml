@@ -1,0 +1,31 @@
+# Copy to go2rtc.yaml and fill in your hub's IP and credentials.
+# go2rtc.yaml is gitignored so your real addresses/passwords never get committed.
+streams:
+  # --- low-res sub streams (H264 640x360): the live grid, no transcoding ---
+  cam1: rtsp://USER:PASSWORD@HUB_IP:554/ch0_1.264
+  cam2: rtsp://USER:PASSWORD@HUB_IP:554/ch1_1.264
+  cam3: rtsp://USER:PASSWORD@HUB_IP:554/ch2_1.264
+  cam4: rtsp://USER:PASSWORD@HUB_IP:554/ch3_1.264
+  # --- full-res main streams (HEVC 2560x1440): click-to-expand. In Docker, go2rtc's
+  #     bundled ffmpeg transcodes HEVC->H264 on demand if the browser can't decode HEVC. ---
+  cam1_hd: rtsp://USER:PASSWORD@HUB_IP:554/ch0_0.264
+  cam2_hd: rtsp://USER:PASSWORD@HUB_IP:554/ch1_0.264
+  cam3_hd: rtsp://USER:PASSWORD@HUB_IP:554/ch2_0.264
+  cam4_hd: rtsp://USER:PASSWORD@HUB_IP:554/ch3_0.264
+
+# Defaults (1984 API/UI, 8554 RTSP, 8555 WebRTC). Listed for clarity.
+api:
+  listen: ":1984"
+  # SECURITY: the go2rtc API/UI has no login by default. Anyone who can reach port 1984
+  # can watch every camera and add new streams (including `exec:` sources, which run
+  # commands on the host). Keep it LAN-only, or set credentials below. With credentials
+  # set, open http://<machine-ip>:1984/ once and log in; if the NightStrix tiles stay
+  # blank, that login is what they're waiting on.
+  # username: "admin"
+  # password: "change-me"
+rtsp:
+  listen: ":8554"
+webrtc:
+  listen: ":8555"
+log:
+  level: info

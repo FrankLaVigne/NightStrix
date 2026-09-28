@@ -1,0 +1,20 @@
+services:
+  # go2rtc: pulls the hub's RTSP streams and re-serves them to browsers (WebRTC/MSE).
+  # host networking is used so WebRTC works cleanly on the LAN and it can reach the hub.
+  go2rtc:
+    image: alexxit/go2rtc:1.9.14
+    container_name: nightstrix-go2rtc
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+
+  # viewer: tiny nginx that serves the NightStrix grid page on port 8099.
+  viewer:
+    image: nginx:1.30-alpine
+    container_name: nightstrix-viewer
+    restart: unless-stopped
+    ports:
+      - "8099:80"
+    volumes:
+      - ./web:/usr/share/nginx/html:ro

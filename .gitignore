@@ -1,0 +1,3 @@
+# Local config: real camera IPs, credentials and names
+go2rtc.yaml
+web/cams.js

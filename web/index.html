@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NightStrix</title>
+<style>
+  :root { --bg:#0b0e13; --panel:#151a22; --edge:#232b36; --text:#e7edf3; --muted:#8a97a6; --accent:#22b8cf; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--edge); }
+  header h1 { font-size:15px; font-weight:600; margin:0; letter-spacing:.3px; }
+  header .dot { width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+  header .spacer { flex:1; }
+  header .hint { color:var(--muted); font-size:12px; }
+  .grid { display:grid; gap:10px; padding:10px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .tile { position:relative; background:#000; border:1px solid var(--edge); border-radius:10px;
+    overflow:hidden; aspect-ratio:16/9; }
+  .tile iframe { position:absolute; inset:0; width:100%; height:100%; border:0; background:#000; }
+  .tile .label { position:absolute; left:0; bottom:0; right:0; padding:8px 10px;
+    background:linear-gradient(transparent,rgba(0,0,0,.75)); font-size:13px; font-weight:600;
+    display:flex; align-items:center; gap:8px; pointer-events:none; z-index:2; }
+  .tile .label .q { color:var(--muted); font-weight:500; font-size:11px; }
+  .tile .ctrls { position:absolute; top:8px; right:8px; display:flex; gap:6px; z-index:3;
+    opacity:0; transition:opacity .15s; }
+  .tile:hover .ctrls { opacity:1; }
+  .tile .ctrls button { background:rgba(10,13,18,.78); color:var(--text); border:1px solid var(--edge);
+    border-radius:7px; padding:5px 9px; font-size:12px; font-weight:600; cursor:pointer; backdrop-filter:blur(4px); }
+  .tile .ctrls button:hover { border-color:var(--accent); color:var(--accent); }
+  /* fullscreen popout for full 2K */
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.94); display:none; z-index:50; flex-direction:column; }
+  #modal.open { display:flex; }
+  #modal .bar { display:flex; align-items:center; gap:12px; padding:10px 16px; }
+  #modal .bar h2 { font-size:15px; margin:0; }
+  #modal .bar .spacer { flex:1; }
+  #modal .bar button { background:var(--panel); color:var(--text); border:1px solid var(--edge);
+    padding:7px 14px; border-radius:8px; cursor:pointer; font-size:13px; }
+  #modal .bar button:hover { border-color:var(--accent); }
+  #modal iframe { flex:1; width:100%; border:0; background:#000; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot"></span>
+  <h1>NightStrix</h1>
+  <span class="spacer"></span>
+  <span class="hint">hover a feed → ⛶ fullscreen · 2K full quality</span>
+</header>
+<div class="grid" id="grid"></div>
+
+<div id="modal">
+  <div class="bar">
+    <h2 id="modalTitle"></h2>
+    <span class="spacer"></span>
+    <button onclick="fsModal()">⛶ Fullscreen</button>
+    <button onclick="closeModal()">✕ Close</button>
+  </div>
+  <iframe id="modalFrame" allowfullscreen allow="autoplay; fullscreen"></iframe>
+</div>
+
+<script src="cams.js"></script>
+<script>
+  // go2rtc runs on the same host that served this page, port 1984.
+  const GO = location.protocol + '//' + location.hostname + ':1984';
+  // Camera list lives in cams.js (copy cams.example.js to create it).
+  const CAMS = window.CAMS || [];
+  const grid = document.getElementById('grid');
+  for (const c of CAMS) {
+    const t = document.createElement('div');
+    t.className = 'tile';
+    const frameSrc = GO + '/stream.html?src=' + c.id;
+    t.innerHTML =
+      '<iframe scrolling="no" allowfullscreen allow="autoplay; fullscreen" src="' + frameSrc + '"></iframe>' +
+      '<div class="ctrls">' +
+        '<button data-act="fs">⛶ Fullscreen</button>' +
+        '<button data-act="hd">2K</button>' +
+      '</div>' +
+      '<div class="label">' + c.name + ' <span class="q">· live (sub)</span></div>';
+    const iframe = t.querySelector('iframe');
+    t.querySelector('[data-act="fs"]').onclick = () => {
+      (iframe.requestFullscreen || iframe.webkitRequestFullscreen).call(iframe);
+    };
+    t.querySelector('[data-act="hd"]').onclick = () => openModal(c);
+    grid.appendChild(t);
+  }
+  const modal = document.getElementById('modal');
+  function openModal(c) {
+    document.getElementById('modalTitle').textContent = c.name + ' — full 2K';
+    document.getElementById('modalFrame').src = GO + '/stream.html?src=' + c.id + '_hd';
+    modal.classList.add('open');
+  }
+  function fsModal() {
+    const f = document.getElementById('modalFrame');
+    (f.requestFullscreen || f.webkitRequestFullscreen).call(f);
+  }
+  function closeModal() {
+    modal.classList.remove('open');
+    document.getElementById('modalFrame').src = 'about:blank';
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>
