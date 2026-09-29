@@ -7,38 +7,56 @@
 <style>
   :root { --bg:#0b0e13; --panel:#151a22; --edge:#232b36; --text:#e7edf3; --muted:#8a97a6; --accent:#22b8cf; }
   * { box-sizing:border-box; }
-  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--text);
     font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
   header { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--edge); }
-  header h1 { font-size:15px; font-weight:600; margin:0; letter-spacing:.3px; }
   header .dot { width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+  header h1 { font-size:15px; font-weight:600; margin:0; letter-spacing:.4px; }
   header .spacer { flex:1; }
   header .hint { color:var(--muted); font-size:12px; }
-  .grid { display:grid; gap:10px; padding:10px;
-    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
-  .tile { position:relative; background:#000; border:1px solid var(--edge); border-radius:10px;
-    overflow:hidden; aspect-ratio:16/9; }
-  .tile iframe { position:absolute; inset:0; width:100%; height:100%; border:0; background:#000; }
-  .tile .label { position:absolute; left:0; bottom:0; right:0; padding:8px 10px;
-    background:linear-gradient(transparent,rgba(0,0,0,.75)); font-size:13px; font-weight:600;
-    display:flex; align-items:center; gap:8px; pointer-events:none; z-index:2; }
-  .tile .label .q { color:var(--muted); font-weight:500; font-size:11px; }
-  .tile .ctrls { position:absolute; top:8px; right:8px; display:flex; gap:6px; z-index:3;
-    opacity:0; transition:opacity .15s; }
-  .tile:hover .ctrls { opacity:1; }
-  .tile .ctrls button { background:rgba(10,13,18,.78); color:var(--text); border:1px solid var(--edge);
-    border-radius:7px; padding:5px 9px; font-size:12px; font-weight:600; cursor:pointer; backdrop-filter:blur(4px); }
-  .tile .ctrls button:hover { border-color:var(--accent); color:var(--accent); }
-  /* fullscreen popout for full 2K */
-  #modal { position:fixed; inset:0; background:rgba(0,0,0,.94); display:none; z-index:50; flex-direction:column; }
-  #modal.open { display:flex; }
-  #modal .bar { display:flex; align-items:center; gap:12px; padding:10px 16px; }
-  #modal .bar h2 { font-size:15px; margin:0; }
-  #modal .bar .spacer { flex:1; }
-  #modal .bar button { background:var(--panel); color:var(--text); border:1px solid var(--edge);
-    padding:7px 14px; border-radius:8px; cursor:pointer; font-size:13px; }
-  #modal .bar button:hover { border-color:var(--accent); }
-  #modal iframe { flex:1; width:100%; border:0; background:#000; }
+
+  main { padding:12px 16px 28px; max-width:1400px; margin:0 auto; }
+
+  /* --- the single "stage": only ONE camera ever streams here --- */
+  .stage { position:relative; background:#000; border:1px solid var(--edge); border-radius:12px;
+    overflow:hidden; height:58vh; min-height:300px; }
+  .stage iframe { position:absolute; inset:0; width:100%; height:100%; border:0; background:#000; }
+  .stage .empty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:8px; color:var(--muted); text-align:center; padding:16px; }
+  .stage .empty svg { width:44px; height:44px; opacity:.5; }
+  .stage .bar { position:absolute; left:0; right:0; top:0; display:flex; align-items:center; gap:10px;
+    padding:10px 12px; background:linear-gradient(rgba(0,0,0,.75),transparent); z-index:2; opacity:0; transition:opacity .15s; }
+  .stage:hover .bar, .stage.no-video .bar { opacity:1; }
+  .stage .bar .name { font-weight:600; font-size:14px; }
+  .stage .bar .grow { flex:1; }
+  .stage .bar button { background:rgba(10,13,18,.7); color:var(--text); border:1px solid var(--edge);
+    border-radius:8px; padding:6px 11px; font-size:12px; font-weight:600; cursor:pointer; backdrop-filter:blur(4px); }
+  .stage .bar button:hover { border-color:var(--accent); color:var(--accent); }
+  .stage .bar button.on { border-color:var(--accent); color:var(--accent); }
+
+  /* --- camera picker: idle cards, nothing streams until clicked --- */
+  .picker-label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px;
+    margin:22px 2px 10px; }
+  .grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+  .card { position:relative; background:var(--panel); border:1px solid var(--edge); border-radius:10px;
+    overflow:hidden; aspect-ratio:16/9; cursor:pointer; }
+  .card.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .card .thumb { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#0d1117; display:block; }
+  .card .placeholder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#2f3947; }
+  .card .placeholder svg { width:30px; height:30px; }
+  .card .label { position:absolute; left:0; right:0; bottom:0; padding:7px 9px;
+    background:linear-gradient(transparent,rgba(0,0,0,.8)); font-size:12px; font-weight:600;
+    display:flex; align-items:center; gap:6px; pointer-events:none; }
+  .card .label .live { color:var(--accent); font-size:10px; }
+  .card .peek { position:absolute; top:6px; right:6px; z-index:2; background:rgba(10,13,18,.78);
+    color:var(--text); border:1px solid var(--edge); border-radius:7px; padding:3px 8px; font-size:11px;
+    font-weight:600; cursor:pointer; opacity:0; transition:opacity .15s; }
+  .card:hover .peek { opacity:1; }
+  .card .peek:hover { border-color:var(--accent); color:var(--accent); }
+  .card .play { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:rgba(255,255,255,.85); opacity:0; transition:opacity .15s; }
+  .card:hover .play { opacity:1; }
+  .card .play svg { width:34px; height:34px; filter:drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
 </style>
 </head>
 <body>
@@ -46,60 +64,110 @@
   <span class="dot"></span>
   <h1>NightStrix</h1>
   <span class="spacer"></span>
-  <span class="hint">hover a feed → ⛶ fullscreen · 2K full quality</span>
+  <span class="hint">click a camera to go live · one at a time · Peek grabs a still</span>
 </header>
-<div class="grid" id="grid"></div>
 
-<div id="modal">
-  <div class="bar">
-    <h2 id="modalTitle"></h2>
-    <span class="spacer"></span>
-    <button onclick="fsModal()">⛶ Fullscreen</button>
-    <button onclick="closeModal()">✕ Close</button>
+<main>
+  <div class="stage no-video" id="stage">
+    <div class="bar" id="stageBar" style="display:none">
+      <span class="name" id="stageName"></span>
+      <span class="grow"></span>
+      <button id="btnHd" title="Toggle full 2K">2K</button>
+      <button id="btnFs" title="Fullscreen">⛶ Fullscreen</button>
+      <button id="btnStop" title="Stop stream">✕ Stop</button>
+    </div>
+    <div class="empty" id="stageEmpty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      <div>Select a camera below to go live.</div>
+      <div style="font-size:12px;opacity:.7">Nothing streams until you pick one — easy on the solar batteries.</div>
+    </div>
   </div>
-  <iframe id="modalFrame" allowfullscreen allow="autoplay; fullscreen"></iframe>
-</div>
+
+  <div class="picker-label">Cameras</div>
+  <div class="grid" id="grid"></div>
+</main>
 
 <script src="cams.js"></script>
 <script>
-  // go2rtc is proxied by nginx under /go2rtc/ on this same origin (see nginx.conf).
-  const GO = '/go2rtc';
-  // Camera list lives in cams.js (copy cams.example.js to create it).
-  const CAMS = window.CAMS || [];
+  const GO = '/go2rtc';                 // go2rtc, proxied by nginx on this origin
+  const CAMS = window.CAMS || [];       // from cams.js
   const grid = document.getElementById('grid');
-  for (const c of CAMS) {
-    const t = document.createElement('div');
-    t.className = 'tile';
-    const frameSrc = GO + '/stream.html?src=' + c.id;
-    t.innerHTML =
-      '<iframe scrolling="no" allowfullscreen allow="autoplay; fullscreen" src="' + frameSrc + '"></iframe>' +
-      '<div class="ctrls">' +
-        '<button data-act="fs">⛶ Fullscreen</button>' +
-        '<button data-act="hd">2K</button>' +
-      '</div>' +
-      '<div class="label">' + c.name + ' <span class="q">· live (sub)</span></div>';
-    const iframe = t.querySelector('iframe');
-    t.querySelector('[data-act="fs"]').onclick = () => {
-      (iframe.requestFullscreen || iframe.webkitRequestFullscreen).call(iframe);
-    };
-    t.querySelector('[data-act="hd"]').onclick = () => openModal(c);
-    grid.appendChild(t);
+  const stage = document.getElementById('stage');
+  const stageBar = document.getElementById('stageBar');
+  const stageEmpty = document.getElementById('stageEmpty');
+  const stageName = document.getElementById('stageName');
+  const btnHd = document.getElementById('btnHd');
+
+  let current = null;   // { cam, hd }
+  let liveFrame = null; // the single live <iframe>
+
+  const playIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const camIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
+
+  // Stop whatever is streaming (removes the iframe -> go2rtc drops the camera).
+  function stopStream() {
+    if (liveFrame) { liveFrame.src = 'about:blank'; liveFrame.remove(); liveFrame = null; }
+    current = null;
+    stage.classList.add('no-video');
+    stageBar.style.display = 'none';
+    stageEmpty.style.display = 'flex';
+    btnHd.classList.remove('on');
+    document.querySelectorAll('.card.active').forEach((c) => c.classList.remove('active'));
   }
-  const modal = document.getElementById('modal');
-  function openModal(c) {
-    document.getElementById('modalTitle').textContent = c.name + ' — full 2K';
-    document.getElementById('modalFrame').src = GO + '/stream.html?src=' + c.id + '_hd';
-    modal.classList.add('open');
+
+  // Go live with exactly one camera (replaces any current stream).
+  function goLive(cam, hd) {
+    if (liveFrame) { liveFrame.src = 'about:blank'; liveFrame.remove(); liveFrame = null; }
+    current = { cam, hd: !!hd };
+    const src = `${GO}/stream.html?src=${cam.id}${hd ? '_hd' : ''}`;
+    liveFrame = document.createElement('iframe');
+    liveFrame.setAttribute('allowfullscreen', '');
+    liveFrame.setAttribute('allow', 'autoplay; fullscreen');
+    liveFrame.scrolling = 'no';
+    liveFrame.src = src;
+    stage.appendChild(liveFrame);
+    stage.classList.remove('no-video');
+    stageEmpty.style.display = 'none';
+    stageName.textContent = cam.name + (hd ? ' — 2K' : '');
+    stageBar.style.display = 'flex';
+    btnHd.classList.toggle('on', !!hd);
+    document.querySelectorAll('.card').forEach((c) => c.classList.toggle('active', c.dataset.id === cam.id));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  function fsModal() {
-    const f = document.getElementById('modalFrame');
-    (f.requestFullscreen || f.webkitRequestFullscreen).call(f);
+
+  // Fetch a single still into a card, without starting a continuous stream.
+  function peek(cam, card) {
+    const img = card.querySelector('.thumb') || document.createElement('img');
+    img.className = 'thumb';
+    img.alt = cam.name;
+    img.onload = () => { const ph = card.querySelector('.placeholder'); if (ph) ph.remove(); };
+    img.src = `${GO}/api/frame.jpeg?src=${cam.id}&_=${Date.now()}`;
+    if (!img.parentNode) card.insertBefore(img, card.firstChild);
   }
-  function closeModal() {
-    modal.classList.remove('open');
-    document.getElementById('modalFrame').src = 'about:blank';
+
+  // Build the picker.
+  for (const cam of CAMS) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.id = cam.id;
+    card.innerHTML =
+      `<div class="placeholder">${camIcon}</div>` +
+      `<button class="peek">📷 Peek</button>` +
+      `<div class="play">${playIcon}</div>` +
+      `<div class="label">${cam.name}<span class="live" style="display:none">● LIVE</span></div>`;
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.peek')) { peek(cam, card); return; }
+      goLive(cam, false);
+    });
+    grid.appendChild(card);
   }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  document.getElementById('btnStop').onclick = stopStream;
+  btnHd.onclick = () => { if (current) goLive(current.cam, !current.hd); };
+  document.getElementById('btnFs').onclick = () => {
+    if (liveFrame && liveFrame.requestFullscreen) liveFrame.requestFullscreen();
+  };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopStream(); });
 </script>
 </body>
 </html>
