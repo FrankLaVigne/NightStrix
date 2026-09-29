@@ -47,7 +47,6 @@
   .card .label { position:absolute; left:0; right:0; bottom:0; padding:7px 9px;
     background:linear-gradient(transparent,rgba(0,0,0,.8)); font-size:12px; font-weight:600;
     display:flex; align-items:center; gap:6px; pointer-events:none; }
-  .card .label .live { color:var(--accent); font-size:10px; }
   .card .peek { position:absolute; top:6px; right:6px; z-index:2; background:rgba(10,13,18,.78);
     color:var(--text); border:1px solid var(--edge); border-radius:7px; padding:3px 8px; font-size:11px;
     font-weight:600; cursor:pointer; opacity:0; transition:opacity .15s; }
@@ -87,10 +86,10 @@
   <div class="grid" id="grid"></div>
 </main>
 
+<!-- Legacy fallback: cams.js defines window.CAMS if there's no cameras.json manifest. -->
 <script src="cams.js"></script>
 <script>
   const GO = '/go2rtc';                 // go2rtc, proxied by nginx on this origin
-  const CAMS = window.CAMS || [];       // from cams.js
   const grid = document.getElementById('grid');
   const stage = document.getElementById('stage');
   const stageBar = document.getElementById('stageBar');
@@ -104,7 +103,27 @@
   const playIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   const camIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
 
-  // Stop whatever is streaming (removes the iframe -> go2rtc drops the camera).
+  // The go2rtc stream name behind a camera for a quality: no hardcoded "_hd" convention.
+  function streamFor(cam, hd) {
+    const s = cam.streams || {};
+    return hd ? (s.main || s.sub || cam.id) : (s.sub || s.main || cam.id);
+  }
+
+  // Load the camera list: prefer the cameras.json manifest; fall back to legacy cams.js.
+  async function loadCameras() {
+    try {
+      const res = await fetch('cameras.json', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data.cameras) ? data.cameras : [];
+        return list
+          .filter((c) => c && typeof c.id === 'string')
+          .map((c) => ({ id: c.id, name: c.display_name || c.id, streams: c.streams || { main: c.id } }));
+      }
+    } catch (e) { /* fall through to legacy */ }
+    return (window.CAMS || []).map((c) => ({ id: c.id, name: c.name || c.id, streams: { sub: c.id, main: `${c.id}_hd` } }));
+  }
+
   function stopStream() {
     if (liveFrame) { liveFrame.src = 'about:blank'; liveFrame.remove(); liveFrame = null; }
     current = null;
@@ -115,16 +134,14 @@
     document.querySelectorAll('.card.active').forEach((c) => c.classList.remove('active'));
   }
 
-  // Go live with exactly one camera (replaces any current stream).
   function goLive(cam, hd) {
     if (liveFrame) { liveFrame.src = 'about:blank'; liveFrame.remove(); liveFrame = null; }
     current = { cam, hd: !!hd };
-    const src = `${GO}/stream.html?src=${cam.id}${hd ? '_hd' : ''}`;
     liveFrame = document.createElement('iframe');
     liveFrame.setAttribute('allowfullscreen', '');
     liveFrame.setAttribute('allow', 'autoplay; fullscreen');
     liveFrame.scrolling = 'no';
-    liveFrame.src = src;
+    liveFrame.src = `${GO}/stream.html?src=${streamFor(cam, hd)}`;
     stage.appendChild(liveFrame);
     stage.classList.remove('no-video');
     stageEmpty.style.display = 'none';
@@ -135,31 +152,32 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // Fetch a single still into a card, without starting a continuous stream.
   function peek(cam, card) {
     const img = card.querySelector('.thumb') || document.createElement('img');
     img.className = 'thumb';
     img.alt = cam.name;
     img.onload = () => { const ph = card.querySelector('.placeholder'); if (ph) ph.remove(); };
-    img.src = `${GO}/api/frame.jpeg?src=${cam.id}&_=${Date.now()}`;
+    img.src = `${GO}/api/frame.jpeg?src=${streamFor(cam, false)}&_=${Date.now()}`;
     if (!img.parentNode) card.insertBefore(img, card.firstChild);
   }
 
-  // Build the picker.
-  for (const cam of CAMS) {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.dataset.id = cam.id;
-    card.innerHTML =
-      `<div class="placeholder">${camIcon}</div>` +
-      `<button class="peek">📷 Peek</button>` +
-      `<div class="play">${playIcon}</div>` +
-      `<div class="label">${cam.name}<span class="live" style="display:none">● LIVE</span></div>`;
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.peek')) { peek(cam, card); return; }
-      goLive(cam, false);
-    });
-    grid.appendChild(card);
+  function buildPicker(cams) {
+    grid.innerHTML = '';
+    for (const cam of cams) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.id = cam.id;
+      card.innerHTML =
+        `<div class="placeholder">${camIcon}</div>` +
+        `<button class="peek">📷 Peek</button>` +
+        `<div class="play">${playIcon}</div>` +
+        `<div class="label">${cam.name}</div>`;
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.peek')) { peek(cam, card); return; }
+        goLive(cam, false);
+      });
+      grid.appendChild(card);
+    }
   }
 
   document.getElementById('btnStop').onclick = stopStream;
@@ -168,6 +186,8 @@
     if (liveFrame && liveFrame.requestFullscreen) liveFrame.requestFullscreen();
   };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') stopStream(); });
+
+  loadCameras().then(buildPicker);
 </script>
 </body>
 </html>

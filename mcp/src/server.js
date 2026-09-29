@@ -10,12 +10,13 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
-import { loadCamerasFromFile } from './inventory.js';
+import { loadCameras } from './inventory.js';
 import { createGo2rtcClient } from './go2rtc.js';
 import { buildTools } from './tools.js';
 
 // --- Config (all via env; no secrets, no camera credentials here) ---------------------
-const CAMS_FILE = process.env.CAMS_FILE || '/config/cams.js';
+// The inventory comes from CONFIG_DIR/cameras.json (manifest) or CONFIG_DIR/cams.js (legacy).
+const CONFIG_DIR = process.env.CONFIG_DIR || '/config';
 const GO2RTC_URL = process.env.GO2RTC_URL || 'http://go2rtc:1984';
 const PORT = Number(process.env.MCP_PORT || 8390);
 const BIND = process.env.MCP_BIND || '0.0.0.0';
@@ -26,10 +27,11 @@ const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN || '';
 
 let cameras = [];
 try {
-  cameras = loadCamerasFromFile(CAMS_FILE);
-  console.error(`[nightstrix-mcp] loaded ${cameras.length} cameras from ${CAMS_FILE}`);
+  const loaded = loadCameras(CONFIG_DIR);
+  cameras = loaded.cameras;
+  console.error(`[nightstrix-mcp] loaded ${cameras.length} cameras from ${CONFIG_DIR}/${loaded.source}`);
 } catch (err) {
-  console.error(`[nightstrix-mcp] WARNING: could not load cameras from ${CAMS_FILE}: ${err.message}`);
+  console.error(`[nightstrix-mcp] WARNING: could not load cameras from ${CONFIG_DIR}: ${err.message}`);
 }
 
 const go2rtc = createGo2rtcClient({ baseUrl: GO2RTC_URL, timeoutMs: TIMEOUT_MS });

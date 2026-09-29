@@ -1,6 +1,7 @@
 # Local config: real camera IPs, credentials and names
 go2rtc.yaml
 web/cams.js
+web/cameras.json
 
 # MCP server dependencies (installed in the image / via `npm ci`)
 mcp/node_modules/

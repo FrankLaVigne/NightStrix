@@ -1,0 +1,27 @@
+{
+  "//": "NightStrix camera manifest — the normalized, vendor-neutral camera model.",
+  "//id": "Logical camera id used by consumers (get_snapshot(\"backyard\")). Opaque handle.",
+  "//display_name": "Human label shown in the UI.",
+  "//provider": "Internal adapter name (nightowl, rtsp, onvif, rpi, ...). NOT exposed to downstream agents.",
+  "//capabilities": "What NightStrix can actually deliver for this camera (queryable by ability, not by vendor).",
+  "//streams": "Logical role -> go2rtc stream NAME (defined in go2rtc.yaml). Never a URL, never credentials.",
+  "//note": "Credentials and RTSP URLs live ONLY in go2rtc.yaml. This file must contain no secrets.",
+  "cameras": [
+    {
+      "id": "front_door",
+      "display_name": "Front Door",
+      "provider": "nightowl",
+      "capabilities": ["video", "audio_input", "snapshot", "sub_stream", "high_res"],
+      "streams": { "sub": "cam1", "main": "cam1_hd" },
+      "metadata": { "location": "entrance" }
+    },
+    {
+      "id": "driveway",
+      "display_name": "Driveway",
+      "provider": "rtsp",
+      "capabilities": ["video", "snapshot"],
+      "streams": { "main": "cam2" },
+      "metadata": {}
+    }
+  ]
+}

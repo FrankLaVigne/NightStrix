@@ -39,13 +39,14 @@ services:
     environment:
       # go2rtc is reached over the INTERNAL Docker network; its API (1984) is never published.
       GO2RTC_URL: http://go2rtc:1984
-      CAMS_FILE: /config/cams.js
+      CONFIG_DIR: /config
       MCP_PORT: "8390"
       # Optional: require "Authorization: Bearer <token>" on /mcp by setting a token here.
       # MCP_AUTH_TOKEN: "change-me"
     volumes:
-      # Reuse NightStrix's single camera inventory (display names + ids only; no credentials).
-      - ./web/cams.js:/config/cams.js:ro
+      # NightStrix's camera manifest (cameras.json) or legacy cams.js — names/ids/stream
+      # handles only, NO credentials. go2rtc.yaml (which holds credentials) is NOT mounted here.
+      - ./web:/config:ro
     ports:
       # LAN-only. This is where an MCP client (Worf) connects. Do NOT expose to the internet.
       - "8390:8390"

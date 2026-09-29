@@ -4,11 +4,15 @@
 
 <h1 align="center">NightStrix</h1>
 
-**A private, local camera wall for Night Owl camera hubs — no cloud, no app, no account.**
+**A private, local, vendor-neutral camera wall — no cloud, no app, no account.**
 
-NightStrix puts every camera on your Night Owl hub into a single live grid in any web
-browser on your network. Video goes straight from the hub to your screen over your own
-LAN. Nothing passes through Night Owl's servers, and nothing leaves your house.
+NightStrix puts your cameras into a single web view on your own network, streamed straight to
+your screen over your LAN — nothing passes through a vendor's servers. It began with **Night
+Owl** hubs (the first provider) and is evolving into a camera-platform-agnostic
+visual/perception layer: cameras are modeled by **capabilities**, not by vendor, so generic
+RTSP, ONVIF, or Raspberry Pi sources can slot in behind the same interface. See
+[`docs/adr/0001-camera-abstraction.md`](docs/adr/0001-camera-abstraction.md) and the
+[roadmap](docs/ROADMAP.md).
 
 It's two small Docker containers and one web page. Set it up in about five minutes.
 
@@ -142,25 +146,32 @@ WebRTC. Listing it under `webrtc.candidates` lets browsers connect directly for
 low-latency WebRTC. If you skip it, the player falls back to MSE through port 8099: a
 little more delay, but it still works.
 
-### 2. `web/cams.js`: what the grid shows
+### 2. Cameras: the manifest (`web/cameras.json`)
 
-```js
-window.CAMS = [
-  { name: 'Front Door', id: 'cam1' },
-  { name: 'Driveway',   id: 'cam2' },
-  { name: 'Backyard',   id: 'cam3' },
-];
+Cameras are described by a small **vendor-neutral manifest** — the source of truth for both the
+wall and the MCP. Copy `cameras.example.json` → `web/cameras.json`:
+
+```jsonc
+{ "cameras": [
+  { "id": "front_door", "display_name": "Front Door", "provider": "nightowl",
+    "capabilities": ["video", "audio_input", "snapshot", "sub_stream", "high_res"],
+    "streams": { "sub": "cam1", "main": "cam1_hd" }, "metadata": {} }
+] }
 ```
 
-- `name` is the label on the tile.
-- `id` must match a stream name in `go2rtc.yaml`. The 2K button opens `<id>_hd`.
-- Array order is grid order. Add or remove entries freely.
+- **`id`** — the logical camera consumers select (`get_snapshot("front_door")`). Opaque handle.
+- **`display_name`** — the label shown in the UI.
+- **`provider`** — internal adapter name; **not** exposed to the MCP / downstream agents.
+- **`capabilities`** — what NightStrix can deliver, queried by *ability* not vendor (vocabulary
+  in [ADR-0001](docs/adr/0001-camera-abstraction.md)).
+- **`streams`** — logical role → **go2rtc stream name** from `go2rtc.yaml`. Never a URL or
+  credentials. This replaces the old `<id>_hd` assumption: declare whatever streams a camera
+  actually has (one, two, …).
 
-After editing either file:
+> **Legacy:** a `web/cams.js` (`window.CAMS = [{name, id}]`) is still accepted as a fallback and
+> mapped onto the model (`streams: { sub: id, main: id + "_hd" }`). Prefer `cameras.json`.
 
-```bash
-docker compose restart
-```
+After editing config: `docker compose restart`.
 
 ### Finding your stream paths
 
@@ -399,15 +410,20 @@ Stop everything with `docker compose down`.
 
 ```
 NightStrix/
-├── docker-compose.yml     # go2rtc + nginx + (optional) nightstrix-mcp services
-├── nginx.conf             # serves the page, proxies go2rtc at /go2rtc/
-├── go2rtc.example.yaml    # template → copy to go2rtc.yaml (gitignored)
+├── docker-compose.yml      # go2rtc + nginx + (optional) nightstrix-mcp services
+├── nginx.conf              # serves the page, proxies go2rtc at /go2rtc/
+├── go2rtc.example.yaml     # template → copy to go2rtc.yaml (gitignored; holds credentials)
+├── cameras.example.json    # template → copy to web/cameras.json (the vendor-neutral manifest)
+├── docs/
+│   ├── adr/                # architecture decision records (ADR-0001: camera abstraction)
+│   └── ROADMAP.md          # future capabilities / backlog (incl. audio-output/TTS)
 ├── web/
-│   ├── index.html         # the camera wall (single file, no build step)
-│   └── cams.example.js    # template → copy to cams.js (gitignored)
-└── mcp/                   # optional read-only MCP server (see "MCP Integration")
-    ├── src/               # inventory.js, go2rtc.js, tools.js, server.js
-    ├── test/              # unit tests (no cameras/network needed)
+│   ├── index.html          # the camera wall (single file, no build step)
+│   ├── cameras.json        # your cameras (gitignored) — copied from cameras.example.json
+│   └── cams.example.js     # legacy camera list (fallback)
+└── mcp/                    # optional read-only MCP server (see "MCP Integration")
+    ├── src/                # inventory.js, go2rtc.js, tools.js, server.js
+    ├── test/               # unit tests (no cameras/network needed)
     ├── Dockerfile
     └── package.json
 ```
