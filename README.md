@@ -1,4 +1,8 @@
-# NightStrix
+<p align="center">
+  <img src="docs/nightstrix-logo.png" alt="NightStrix logo" width="360">
+</p>
+
+<h1 align="center">NightStrix</h1>
 
 **A private, local camera wall for Night Owl camera hubs — no cloud, no app, no account.**
 
