@@ -26,3 +26,28 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - go2rtc
+
+  # nightstrix-mcp: a small, READ-ONLY MCP server exposing safe camera capabilities
+  # (list_cameras, camera_status, get_snapshot) to an MCP client such as the experimental
+  # "Worf" home/security agent. It is a CONSTRAINED FACADE over go2rtc — it never proxies
+  # the go2rtc admin API and never returns credentials or RTSP URLs. Optional: NightStrix
+  # works fully without this service. See README "MCP Integration".
+  mcp:
+    build: ./mcp
+    container_name: nightstrix-mcp
+    restart: unless-stopped
+    environment:
+      # go2rtc is reached over the INTERNAL Docker network; its API (1984) is never published.
+      GO2RTC_URL: http://go2rtc:1984
+      CAMS_FILE: /config/cams.js
+      MCP_PORT: "8390"
+      # Optional: require "Authorization: Bearer <token>" on /mcp by setting a token here.
+      # MCP_AUTH_TOKEN: "change-me"
+    volumes:
+      # Reuse NightStrix's single camera inventory (display names + ids only; no credentials).
+      - ./web/cams.js:/config/cams.js:ro
+    ports:
+      # LAN-only. This is where an MCP client (Worf) connects. Do NOT expose to the internet.
+      - "8390:8390"
+    depends_on:
+      - go2rtc

@@ -221,6 +221,107 @@ NightStrix is built for a **trusted home network**. Please read this section.
 
 ---
 
+## MCP Integration
+
+NightStrix can optionally expose a small, **read-only** [MCP](https://modelcontextprotocol.io)
+(Model Context Protocol) server that lets an MCP client — for example an AI agent — safely
+*see* your cameras without ever receiving the Night Owl credentials or raw RTSP URLs.
+
+**This is entirely optional. NightStrix remains fully useful as a standalone camera wall
+without it.**
+
+### Why NightStrix exposes MCP
+
+> **Worf** is an experimental home/security AI agent being developed as part of the
+> **MAJEL** (Multi-Agent Junction & Execution Layer) multi-agent architecture. NightStrix
+> provides Worf with narrowly scoped camera capabilities through MCP. **Worf and MAJEL are
+> separate projects and are not required to use NightStrix.**
+
+The design principle is **agents receive capabilities, not credentials**. NightStrix knows
+*how* to reach the cameras; an agent only decides *when* and *why*, and reasons over the
+*results* (e.g. a snapshot image). NightStrix is **infrastructure, not an agent** — it does
+no AI reasoning and no agent-to-agent communication.
+
+```
+Night Owl Cameras
+        |
+        v
+   Night Owl Hub
+        |
+        v
+      go2rtc
+        |
+        +--------> NightStrix Web UI   (the camera wall)
+        |
+        v
+ NightStrix MCP   (this service — read-only facade)
+        |
+        v
+       Worf       (external agent; not in this repo)
+        |
+        v
+      MAJEL
+        |
+        v
+      Bailey
+```
+
+### Available tools (all read-only)
+
+| Tool | Input | Returns |
+|------|-------|---------|
+| `list_cameras` | – | Known cameras: `{ id, name, available }` |
+| `camera_status` | `camera_id` | `{ camera_id, available, stream_available }` |
+| `get_snapshot` | `camera_id` | A current **JPEG image** (real bytes, for multimodal reasoning) |
+
+`camera_id` is always one of the ids from `list_cameras` (which come from your existing
+`web/cams.js`). Snapshots use the low-res **sub** stream. Unknown or malformed ids, RTSP
+URLs, and go2rtc API paths are rejected.
+
+### Running it
+
+The MCP server is a small Node service (`mcp/`) that ships as the `nightstrix-mcp` container:
+
+```bash
+docker compose up -d          # starts go2rtc, the viewer, AND nightstrix-mcp
+```
+
+An MCP client connects over **Streamable HTTP** at `http://<docker-host>:8390/mcp`. The
+service reaches go2rtc over the internal Docker network (`http://go2rtc:1984`); go2rtc's API
+port is never published. Health check: `curl http://<docker-host>:8390/health`.
+
+### Testing
+
+The tool logic has unit tests that need **no cameras and no network** (they mock go2rtc):
+
+```bash
+cd mcp
+npm install
+npm test
+```
+
+### Security
+
+The MCP server is a **constrained facade**, not a go2rtc proxy. It **never** exposes Night
+Owl usernames/passwords, credential-bearing RTSP URLs, go2rtc configuration, or the go2rtc
+admin API, and it offers **no** generic primitives (`fetch_url`, `call_go2rtc_api`,
+`read_file`, `exec`, …). Every request selects a **known camera id**, which NightStrix
+resolves internally.
+
+- **Credentials never leave NightStrix.** The MCP service does not read `go2rtc.yaml`; it
+  only reads `web/cams.js` (names + ids) and calls go2rtc for a snapshot/status.
+- **LAN != authorization.** By default the port is open on your LAN. Do **not** expose
+  `8390` (or `8554`/`8555`/`8099`) to the internet. To require a token, set
+  `MCP_AUTH_TOKEN` on the `mcp` service; clients then send `Authorization: Bearer <token>`.
+
+### Not yet implemented (future)
+
+Historical/analytic capabilities such as `get_clip`, `get_events`, or `camera_activity`
+(e.g. "did anything happen in the backyard last night?") are **not** implemented — NightStrix
+currently focuses on live access and does not pretend to have recordings or event history.
+
+---
+
 ## Troubleshooting
 
 <details>
@@ -298,12 +399,17 @@ Stop everything with `docker compose down`.
 
 ```
 NightStrix/
-├── docker-compose.yml     # go2rtc + nginx services
+├── docker-compose.yml     # go2rtc + nginx + (optional) nightstrix-mcp services
 ├── nginx.conf             # serves the page, proxies go2rtc at /go2rtc/
 ├── go2rtc.example.yaml    # template → copy to go2rtc.yaml (gitignored)
-└── web/
-    ├── index.html         # the camera wall (single file, no build step)
-    └── cams.example.js    # template → copy to cams.js (gitignored)
+├── web/
+│   ├── index.html         # the camera wall (single file, no build step)
+│   └── cams.example.js    # template → copy to cams.js (gitignored)
+└── mcp/                   # optional read-only MCP server (see "MCP Integration")
+    ├── src/               # inventory.js, go2rtc.js, tools.js, server.js
+    ├── test/              # unit tests (no cameras/network needed)
+    ├── Dockerfile
+    └── package.json
 ```
 
 ---
