@@ -63,8 +63,9 @@ flowchart LR
 1. **[go2rtc](https://github.com/AlexxIT/go2rtc)** connects to the hub's RTSP streams
    on demand and turns them into formats browsers can play natively: WebRTC, or
    MSE over WebSocket.
-2. **nginx** serves the NightStrix grid page and proxies go2rtc under `/go2rtc/`, so the
-   browser only needs **one port: 8099**.
+2. **nginx** serves the NightStrix grid page and proxies **only the parts of go2rtc the page
+   needs** (the player and live-stream/snapshot endpoints) under `/go2rtc/`, so the browser
+   only needs **one port: 8099**. go2rtc's admin UI and API are not reachable through it.
 3. **The page** (`web/index.html`) is a single, dependency-free HTML file that lays out one
    tile per camera and embeds go2rtc's player in each.
 
@@ -78,7 +79,8 @@ flowchart LR
 - Optional **HEVC → H.264** transcoding (go2rtc's bundled ffmpeg) for browsers without HEVC
 - Automatic reconnect: sleeping battery cameras come back on their own
 - Camera names and order set in one small config file
-- go2rtc's built-in web UI for stream status, links and debugging
+- go2rtc's built-in web UI for stream status and debugging (localhost only, see
+  [Admin access](#admin-access-go2rtc-web-ui))
 
 ---
 
@@ -199,7 +201,6 @@ You can also add a stream from go2rtc's web UI and experiment there.
 | Where | What |
 |---|---|
 | `http://<ip>:8099/` | The NightStrix camera wall |
-| `http://<ip>:8099/go2rtc/` | go2rtc's web UI: stream status, links, debugging |
 | `rtsp://<ip>:8554/<stream>` | Clean RTSP re-stream of any camera, for other apps |
 
 **Tips**
@@ -208,20 +209,40 @@ You can also add a stream from go2rtc's web UI and experiment there.
 - **Home Assistant / Frigate:** point them at `rtsp://<ip>:8554/cam1` instead of the
   hub. go2rtc shares one hub connection across every viewer, which is easier on the hub.
 
+### Admin access (go2rtc web UI)
+
+The go2rtc web UI and API have **no login** and can read your RTSP credentials and create
+streams, so they are deliberately **not** proxied on 8099. To use them for debugging, publish
+the API on **localhost only** by adding this under the `go2rtc` service's `ports:`:
+
+```yaml
+      - "127.0.0.1:11984:1984"   # go2rtc admin UI, this machine only
+```
+
+Then `docker compose up -d` and open `http://127.0.0.1:11984/` on the Docker machine. From
+another computer, tunnel over SSH instead of publishing it on the LAN:
+`ssh -L 11984:127.0.0.1:11984 you@docker-host`, then open `http://127.0.0.1:11984/` locally.
+Remove the line again when you're done.
+
 ---
 
 ## 🔐 Security
 
 NightStrix is built for a **trusted home network**. Please read this section.
 
-- **Do not expose it to the internet.** Don't port-forward 8099, 8554 or 8555. go2rtc's
-  API (at `/go2rtc/`) has **no login by default**: anyone who can reach it can watch
-  every camera, see the configured RTSP URLs (including hub credentials), and add new
-  streams, including `exec:` sources that run commands on the Docker host.
+- **Do not expose it to the internet.** Don't port-forward 8099, 8554 or 8555.
+- **Never publish go2rtc's API port (1984) on the LAN.** It has **no login by default**:
+  anyone who can reach it can watch every camera, see the configured RTSP URLs (including
+  hub credentials), and add new streams, including `exec:` sources that run commands on the
+  Docker host. The viewer on 8099 only proxies an allowlist of player/stream endpoints and
+  only accepts plain stream names, so it does not expose the API; see
+  [Admin access](#admin-access-go2rtc-web-ui) for reaching it safely.
 - **For remote viewing, use a VPN** such as [Tailscale](https://tailscale.com) or
   WireGuard, then open NightStrix as if you were at home.
 - **Add a login (recommended).** Uncomment `username` / `password` under `api:` in
   `go2rtc.yaml` and restart. The browser will ask for them when the grid loads.
+  Note: `nightstrix-mcp` does not send go2rtc credentials yet, so enabling this currently
+  breaks the MCP service.
 - **Set a real password on your hub.** Some hubs ship with user `admin` and a *blank*
   RTSP password, which lets anyone on your Wi-Fi view the cameras directly, with or
   without NightStrix. Change it in the hub's settings, then update `go2rtc.yaml`.
@@ -281,9 +302,16 @@ Night Owl Cameras
 
 | Tool | Input | Returns |
 |------|-------|---------|
-| `list_cameras` | – | Known cameras: `{ id, name, available }` |
-| `camera_status` | `camera_id` | `{ camera_id, available, stream_available }` |
-| `get_snapshot` | `camera_id` | A current **JPEG image** (real bytes, for multimodal reasoning) |
+| `list_cameras` | – | Known cameras: `{ id, name, capabilities, configured, streaming_now, last_seen }` |
+| `camera_status` | `camera_id` | `{ camera_id, configured, streaming_now, last_seen }` |
+| `get_snapshot` | `camera_id` | A current **JPEG image** (real bytes, for multimodal reasoning) and when it was observed |
+
+**Status is evidence-based, and `configured` does not mean online.** A battery camera can be
+dead while its stream is still configured. `streaming_now` means go2rtc is receiving its video
+right now (someone is viewing it); `last_seen` is when NightStrix last *observed* live video from
+it, via a successful snapshot or an active stream, or `null` if not observed since the MCP
+service started (it is kept in memory). Status checks never contact a camera; only
+`get_snapshot` does, which wakes battery cameras, so clients should not poll it.
 
 `camera_id` is always one of the ids from `list_cameras` (which come from your existing
 `web/cams.js`). Snapshots use the low-res **sub** stream. Unknown or malformed ids, RTSP
@@ -340,8 +368,8 @@ currently focuses on live access and does not pretend to have recordings or even
 
 - **Battery/solar cameras sleep.** The feed appears when the camera wakes (motion, or
   a periodic wake-up). go2rtc reconnects on its own.
-- Open `http://<ip>:8099/go2rtc/` and check the stream. An error there usually means a
-  wrong IP, path, or password in `go2rtc.yaml`.
+- Check the stream in go2rtc's web UI (see [Admin access](#admin-access-go2rtc-web-ui)).
+  An error there usually means a wrong IP, path, or password in `go2rtc.yaml`.
 - Check the logs: `docker logs nightstrix-go2rtc`.
 </details>
 
@@ -411,7 +439,7 @@ Stop everything with `docker compose down`.
 ```
 NightStrix/
 ├── docker-compose.yml      # go2rtc + nginx + (optional) nightstrix-mcp services
-├── nginx.conf              # serves the page, proxies go2rtc at /go2rtc/
+├── nginx.conf              # serves the page, proxies an allowlist of go2rtc at /go2rtc/
 ├── go2rtc.example.yaml     # template → copy to go2rtc.yaml (gitignored; holds credentials)
 ├── cameras.example.json    # template → copy to web/cameras.json (the vendor-neutral manifest)
 ├── docs/

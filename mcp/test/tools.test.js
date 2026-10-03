@@ -39,27 +39,73 @@ function assertNoLeak(obj) {
   for (const s of forbidden) assert.ok(!blob.includes(s), `response leaked "${s}": ${blob}`);
 }
 
-test('list_cameras: logical cameras with capabilities + availability; no provider/streams leak', async () => {
-  const tools = buildTools({ cameras: CAMERAS, go2rtc: mockGo2rtc({ streams: { fd_sub: {}, fd_main: {} } }) });
+// A fixed clock so last_seen / observed_at are deterministic.
+const T0 = '2026-10-03T12:00:00.000Z';
+const T1 = '2026-10-03T12:05:00.000Z';
+function clock(...isos) { let i = 0; return () => new Date(isos[Math.min(i++, isos.length - 1)]); }
+
+// What go2rtc reports for a stream that is receiving video: connection info INCLUDING the
+// credential-bearing source URL. NightStrix must read bytes_recv and nothing else.
+const RECEIVING = { producers: [{ url: 'rtsp://user:pass@192.168.1.163:554/ch3_1.264', remote_addr: '192.168.1.163:554', bytes_recv: 48211 }] };
+const IDLE = { producers: [{ url: 'rtsp://user:pass@192.168.1.163:554/ch3_1.264' }] };
+
+test('list_cameras: configured is not online; never-observed camera has last_seen null; no leak', async () => {
+  const tools = buildTools({ cameras: CAMERAS, go2rtc: mockGo2rtc({ streams: { fd_sub: IDLE, fd_main: IDLE } }) });
   const res = await tools.listCameras();
   assert.deepEqual(res.cameras, [
-    { id: 'front_door', name: 'Front Door', capabilities: ['video', 'snapshot', 'sub_stream', 'high_res'], available: true },
-    { id: 'driveway', name: 'Driveway', capabilities: ['video', 'snapshot'], available: false }, // dw_main not in go2rtc
+    // Configured but never observed: exactly the dead-battery case. Must not read as online.
+    { id: 'front_door', name: 'Front Door', capabilities: ['video', 'snapshot', 'sub_stream', 'high_res'], configured: true, streaming_now: false, last_seen: null },
+    { id: 'driveway', name: 'Driveway', capabilities: ['video', 'snapshot'], configured: false, streaming_now: false, last_seen: null }, // dw_main not in go2rtc
   ]);
   assertNoLeak(res);
 });
 
-test('list_cameras: go2rtc down -> all unavailable, still listed', async () => {
+test('list_cameras: a receiving stream -> streaming_now + last_seen; source URL never leaks', async () => {
+  const tools = buildTools({ cameras: CAMERAS, go2rtc: mockGo2rtc({ streams: { fd_sub: RECEIVING, fd_main: IDLE, dw_main: IDLE } }), now: clock(T0) });
+  const res = await tools.listCameras();
+  assert.deepEqual(res.cameras.map((c) => [c.id, c.streaming_now, c.last_seen]), [['front_door', true, T0], ['driveway', false, null]]);
+  assertNoLeak(res);
+});
+
+test('last_seen persists after streaming stops, and survives go2rtc being down', async () => {
+  let streams = { fd_sub: RECEIVING, fd_main: IDLE };
+  let down = false;
+  const go2rtc = {
+    async listStreams() { if (down) throw new Go2rtcError('unavailable', 'down'); return streams; },
+    async getFrame() { throw new Error('not used'); },
+  };
+  const tools = buildTools({ cameras: CAMERAS, go2rtc, now: clock(T0) });
+  await tools.listCameras();                                   // observed streaming at T0
+  streams = { fd_sub: IDLE, fd_main: IDLE };
+  assert.deepEqual(await tools.cameraStatus('front_door'), { camera_id: 'front_door', configured: true, streaming_now: false, last_seen: T0 });
+  down = true;
+  const st = await tools.cameraStatus('front_door');
+  assert.equal(st.error, 'go2rtc_unavailable');
+  assert.equal(st.last_seen, T0, 'last observation is still reported when go2rtc is down');
+});
+
+test('get_snapshot: success records observed_at and last_seen; failure records nothing', async () => {
+  const ok = buildTools({ cameras: CAMERAS, go2rtc: mockGo2rtc({ streams: { fd_sub: IDLE, fd_main: IDLE } }), now: clock(T1) });
+  const snap = await ok.getSnapshot('front_door');
+  assert.equal(snap.observed_at, T1);
+  assert.equal((await ok.cameraStatus('front_door')).last_seen, T1);
+
+  const dead = buildTools({ cameras: CAMERAS, go2rtc: mockGo2rtc({ streams: { fd_sub: IDLE }, frameError: new Go2rtcError('bad_status', 'no frame', 500) }), now: clock(T1) });
+  assert.equal((await dead.getSnapshot('front_door')).error, 'snapshot_unavailable');
+  assert.equal((await dead.cameraStatus('front_door')).last_seen, null, 'a failed snapshot is not an observation');
+});
+
+test('list_cameras: go2rtc down -> nothing configured or streaming, still listed', async () => {
   const tools = buildTools({ cameras: CAMERAS, go2rtc: mockGo2rtc({ listError: new Go2rtcError('unavailable', 'down') }) });
   const res = await tools.listCameras();
   assert.equal(res.cameras.length, 2);
-  assert.ok(res.cameras.every((c) => c.available === false));
+  assert.ok(res.cameras.every((c) => c.configured === false && c.streaming_now === false && c.last_seen === null));
 });
 
-test('camera_status: known camera available; unknown/malformed rejected; no leak', async () => {
+test('camera_status: known camera reported; unknown/malformed rejected; no leak', async () => {
   const mock = mockGo2rtc();
   const tools = buildTools({ cameras: CAMERAS, go2rtc: mock });
-  assert.deepEqual(await tools.cameraStatus('front_door'), { camera_id: 'front_door', available: true, stream_available: true });
+  assert.deepEqual(await tools.cameraStatus('front_door'), { camera_id: 'front_door', configured: true, streaming_now: false, last_seen: null });
   assert.equal((await tools.cameraStatus('kitchen')).error, 'unknown_camera');
   for (const id of badIds) assert.equal((await tools.cameraStatus(id)).error, 'invalid_camera_id', `for ${JSON.stringify(id)}`);
   assert.equal(mock.calls.listStreams, 1, 'go2rtc only queried for the one valid known camera');
