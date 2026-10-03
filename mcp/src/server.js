@@ -52,7 +52,7 @@ function makeServer() {
     'list_cameras',
     {
       title: 'List cameras',
-      description: 'List the cameras NightStrix knows about (id, name, availability). No credentials or stream URLs are returned.',
+      description: 'List the cameras NightStrix knows about, with evidence-based status. `configured` only means the camera is set up; it does NOT mean the camera is online. `streaming_now` means video is being received right now. `last_seen` is when NightStrix last observed live video from it (null = not observed since NightStrix started). To check whether a camera is online now, call get_snapshot (this wakes battery cameras, so do not poll). No credentials or stream URLs are returned.',
       inputSchema: {},
     },
     async () => jsonResult(await tools.listCameras()),
@@ -62,7 +62,7 @@ function makeServer() {
     'camera_status',
     {
       title: 'Camera status',
-      description: 'Read-only status for one camera: whether NightStrix/go2rtc has the stream available. Use get_snapshot for a live frame.',
+      description: 'Read-only status for one camera without contacting it: `configured`, `streaming_now`, and `last_seen` (see list_cameras). `configured` does NOT mean online. Use get_snapshot to verify the camera is reachable right now.',
       inputSchema: { camera_id: z.string().describe('A known camera id from list_cameras (e.g. "front_door").') },
     },
     async ({ camera_id }) => jsonResult(await tools.cameraStatus(camera_id)),
@@ -81,7 +81,7 @@ function makeServer() {
       return {
         content: [
           { type: 'image', data: result.bytes.toString('base64'), mimeType: result.mimeType },
-          { type: 'text', text: `Snapshot of "${result.camera_id}" (${result.mimeType}, ${result.bytes.length} bytes).` },
+          { type: 'text', text: `Snapshot of "${result.camera_id}" observed at ${result.observed_at} (${result.mimeType}, ${result.bytes.length} bytes).` },
         ],
       };
     },

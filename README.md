@@ -302,9 +302,16 @@ Night Owl Cameras
 
 | Tool | Input | Returns |
 |------|-------|---------|
-| `list_cameras` | – | Known cameras: `{ id, name, available }` |
-| `camera_status` | `camera_id` | `{ camera_id, available, stream_available }` |
-| `get_snapshot` | `camera_id` | A current **JPEG image** (real bytes, for multimodal reasoning) |
+| `list_cameras` | – | Known cameras: `{ id, name, capabilities, configured, streaming_now, last_seen }` |
+| `camera_status` | `camera_id` | `{ camera_id, configured, streaming_now, last_seen }` |
+| `get_snapshot` | `camera_id` | A current **JPEG image** (real bytes, for multimodal reasoning) and when it was observed |
+
+**Status is evidence-based, and `configured` does not mean online.** A battery camera can be
+dead while its stream is still configured. `streaming_now` means go2rtc is receiving its video
+right now (someone is viewing it); `last_seen` is when NightStrix last *observed* live video from
+it, via a successful snapshot or an active stream, or `null` if not observed since the MCP
+service started (it is kept in memory). Status checks never contact a camera; only
+`get_snapshot` does, which wakes battery cameras, so clients should not poll it.
 
 `camera_id` is always one of the ids from `list_cameras` (which come from your existing
 `web/cams.js`). Snapshots use the low-res **sub** stream. Unknown or malformed ids, RTSP
